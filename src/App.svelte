@@ -50,6 +50,12 @@
     created_at: string;
   };
 
+  type BackupRecord = {
+    directory: string;
+    created_at: string;
+    file_count: number;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
@@ -61,6 +67,8 @@
   let saveFiles: Record<string, SaveFile[]> = {};
   let loadingSaves = '';
   let backupMessages: Record<string, string> = {};
+  let backups: Record<string, BackupRecord[]> = {};
+  let loadingBackups = '';
 
   onMount(() => {
     let timer: number | undefined;
@@ -162,6 +170,35 @@
         ...backupMessages,
         [id]: `${result.file_count} fichier${result.file_count === 1 ? '' : 's'} sauvegardé${result.file_count === 1 ? '' : 's'}`,
       };
+      await loadBackups(id);
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
+
+  async function loadBackups(id: string) {
+    loadingBackups = id;
+    try {
+      backups[id] = await invoke<BackupRecord[]>('list_backups', { id });
+      backups = { ...backups };
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      loadingBackups = '';
+    }
+  }
+
+  async function restoreBackup(id: string, directory: string) {
+    error = '';
+    try {
+      const result = await invoke<BackupResult>('restore_backup', { id, directory });
+      backupMessages = {
+        ...backupMessages,
+        [id]: `Restauration effectuée · état précédent sauvegardé (${result.file_count} fichier${result.file_count === 1 ? '' : 's'})`,
+      };
+      await loadBackups(id);
+      saveFiles[id] = await invoke<SaveFile[]>('scan_game_saves', { id });
+      saveFiles = { ...saveFiles };
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
     }
@@ -264,8 +301,21 @@
                 {loadingSaves === game.id ? 'Analyse en cours…' : expandedGame === game.id ? 'Masquer les sauvegardes' : 'Voir les sauvegardes'}
               </button>
               <button class="backup-button" on:click={() => backupSaves(game.id)}>Créer un backup local</button>
+              <button class="backup-button" on:click={() => loadBackups(game.id)}>
+                {loadingBackups === game.id ? 'Chargement…' : 'Historique des backups'}
+              </button>
               {#if backupMessages[game.id]}
                 <span class="backup-message">{backupMessages[game.id]}</span>
+              {/if}
+              {#if backups[game.id]?.length}
+                <div class="backup-history">
+                  {#each backups[game.id] as backup}
+                    <div class="backup-row">
+                      <span>{backup.created_at} · {backup.file_count} fichier{backup.file_count === 1 ? '' : 's'}</span>
+                      <button on:click={() => restoreBackup(game.id, backup.directory)}>Restaurer</button>
+                    </div>
+                  {/each}
+                </div>
               {/if}
               {#if expandedGame === game.id}
                 <div class="save-list">

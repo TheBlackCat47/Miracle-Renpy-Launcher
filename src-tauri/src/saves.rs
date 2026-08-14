@@ -23,6 +23,13 @@ pub struct BackupResult {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct BackupRecord {
+    pub directory: String,
+    pub created_at: String,
+    pub file_count: usize,
+}
+
 #[tauri::command]
 pub fn scan_game_saves(id: String) -> Result<Vec<SaveFile>, String> {
     let game = list_games()?
@@ -84,6 +91,72 @@ pub fn backup_game_saves(id: String) -> Result<BackupResult, String> {
         backup_directory: backup_directory.display().to_string(),
         file_count: files.len(),
         created_at: timestamp,
+    })
+}
+
+#[tauri::command]
+pub fn list_backups(id: String) -> Result<Vec<BackupRecord>, String> {
+    let backup_root = backup_root(&id)?;
+    if !backup_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut backups = Vec::new();
+    for entry in fs::read_dir(&backup_root).map_err(io_error)? {
+        let entry = entry.map_err(io_error)?;
+        let directory = entry.path();
+        if directory.is_dir() {
+            let file_count = collect_backup_files(&directory)?.len();
+            backups.push(BackupRecord {
+                directory: directory.display().to_string(),
+                created_at: entry.file_name().to_string_lossy().to_string(),
+                file_count,
+            });
+        }
+    }
+    backups.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    Ok(backups)
+}
+
+#[tauri::command]
+pub fn restore_backup(id: String, directory: String) -> Result<BackupResult, String> {
+    let game = list_games()?
+        .into_iter()
+        .find(|game| game.id == id)
+        .ok_or_else(|| "Jeu introuvable dans la bibliothèque.".to_string())?;
+    let backup_root = fs::canonicalize(backup_root(&game.id)?).map_err(io_error)?;
+    let selected = fs::canonicalize(&directory).map_err(io_error)?;
+    if selected == backup_root || !selected.starts_with(&backup_root) || !selected.is_dir() {
+        return Err("Le dossier de restauration n’est pas un backup MRL valide.".to_string());
+    }
+
+    let current_backup = backup_game_saves(game.id.clone())?;
+    let game_root = fs::canonicalize(&game.path).map_err(io_error)?;
+    let files = collect_backup_files(&selected)?;
+    for source in &files {
+        let relative = source.strip_prefix(&selected).map_err(io_error)?;
+        if !is_save_relative_path(relative) {
+            return Err(
+                "Le backup contient un chemin qui n’est pas une sauvegarde autorisée.".to_string(),
+            );
+        }
+        let target = game_root.join(relative);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(io_error)?;
+        }
+        let temporary = temporary_path(&target);
+        fs::copy(source, &temporary).map_err(io_error)?;
+        if target.exists() {
+            let mut previous = target.as_os_str().to_os_string();
+            previous.push(format!(".pre-restore-{}", process::id()));
+            fs::rename(&target, PathBuf::from(previous)).map_err(io_error)?;
+        }
+        fs::rename(&temporary, &target).map_err(io_error)?;
+    }
+
+    Ok(BackupResult {
+        backup_directory: current_backup.backup_directory,
+        file_count: files.len(),
+        created_at: current_backup.created_at,
     })
 }
 
@@ -151,6 +224,39 @@ fn unix_timestamp() -> String {
         .unwrap_or_default()
         .as_secs()
         .to_string()
+}
+
+fn backup_root(id: &str) -> Result<PathBuf, String> {
+    Ok(dirs_next::data_local_dir()
+        .ok_or_else(|| "Impossible de déterminer le dossier de données local.".to_string())?
+        .join("MiracleRenpyLauncher")
+        .join("backups")
+        .join(id))
+}
+
+fn collect_backup_files(directory: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut files = Vec::new();
+    collect_paths(directory, &mut files)?;
+    Ok(files)
+}
+
+fn collect_paths(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+    for entry in fs::read_dir(directory).map_err(io_error)? {
+        let path = entry.map_err(io_error)?.path();
+        if path.is_dir() {
+            collect_paths(&path, files)?;
+        } else if path.is_file() {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn is_save_relative_path(path: &Path) -> bool {
+    let value = path.to_string_lossy().replace('\\', "/");
+    value.starts_with("game/saves/")
+        || value.starts_with("saves/")
+        || value.starts_with("game/persistent/")
 }
 
 fn temporary_path(target: &Path) -> PathBuf {

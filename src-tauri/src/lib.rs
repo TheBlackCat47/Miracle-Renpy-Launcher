@@ -14,7 +14,9 @@ pub fn run() {
             process::launch_game,
             process::get_running_games,
             saves::scan_game_saves,
-            saves::backup_game_saves
+            saves::backup_game_saves,
+            saves::list_backups,
+            saves::restore_backup
         ])
         .run(tauri::generate_context!())
         .expect("error while running Miracle Ren'Py Launcher");
