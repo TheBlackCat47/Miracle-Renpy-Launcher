@@ -77,7 +77,7 @@
   let backups: Record<string, BackupRecord[]> = {};
   let loadingBackups = '';
   let showCloudPanel = false;
-  let googleClientId = '';
+  let googleClientId = import.meta.env.ID_client ?? '';
   let cloudStatus: CloudStatus | null = null;
   let cloudMessage = '';
 
