@@ -24,6 +24,7 @@
     id: string;
     name: string;
     path: string;
+    save_directory: string | null;
     executable: string | null;
     confidence: string;
     save_count: number;
@@ -466,7 +467,7 @@
               <p title={game.path}>{game.path}</p>
               <div class="game-meta">
                 <span>{game.save_count} dossier{game.save_count === 1 ? '' : 's'} de sauvegarde</span>
-                <span>{game.executable ? 'Exécutable détecté' : 'Lancement à configurer'}</span>
+                <span>{game.save_directory ? 'Sauvegardes AppData associées' : game.executable ? 'Exécutable détecté' : 'Lancement à configurer'}</span>
               </div>
               <button class:running={runningIds.includes(game.id)} class="launch-button" disabled={!game.executable || runningIds.includes(game.id)} on:click={() => launchGame(game.id)}>
                 {runningIds.includes(game.id) ? 'Jeu en cours' : 'Lancer le jeu'}

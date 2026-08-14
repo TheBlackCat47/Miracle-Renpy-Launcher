@@ -1,5 +1,5 @@
 use crate::cloud::valid_access_token;
-use crate::saves::scan_game_saves;
+use crate::saves::{resolve_save_path, scan_game_saves};
 use crate::storage::{get_setting, list_games, set_setting};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -84,7 +84,7 @@ pub fn sync_game_to_drive(id: String) -> Result<SyncResult, String> {
     let mut manifest_files = Vec::with_capacity(saves.len());
 
     for save in &saves {
-        let source = safe_local_save_path(&root, &save.relative_path)?;
+        let source = resolve_save_path(&game, &root, Path::new(&save.relative_path))?;
         let remote_id = upload_file(
             &client,
             &token,
@@ -289,7 +289,7 @@ pub fn resolve_sync_conflict(
         fs::write(&temporary, bytes).map_err(io_error)?;
         replace_local_file(&source, &temporary)?;
     } else {
-        let local = safe_local_save_path(&root, &relative)?;
+        let local = resolve_save_path(&game, &root, Path::new(&relative))?;
         let remote_id = upload_file(
             &client,
             &token,
@@ -451,20 +451,11 @@ fn parse_file_id(response: reqwest::blocking::Response) -> Result<String, String
         .map_err(|error| format!("Réponse Google Drive invalide : {error}"))
 }
 
-fn safe_local_save_path(root: &Path, relative: &str) -> Result<std::path::PathBuf, String> {
-    let candidate = root.join(relative);
-    let canonical = fs::canonicalize(&candidate)
-        .map_err(|error| format!("Sauvegarde inaccessible ({relative}) : {error}"))?;
-    if !canonical.starts_with(root) || !canonical.is_file() {
-        return Err("Une sauvegarde hors du dossier du jeu a été refusée.".to_string());
-    }
-    Ok(canonical)
-}
-
 fn safe_relative_path(relative: &str) -> Result<String, String> {
     let normalized = normalize_relative(relative);
     let path = Path::new(&normalized);
-    let valid_root = normalized.starts_with("game/saves/")
+    let valid_root = normalized.starts_with("external/")
+        || normalized.starts_with("game/saves/")
         || normalized.starts_with("saves/")
         || normalized.starts_with("game/persistent/");
     if !valid_root

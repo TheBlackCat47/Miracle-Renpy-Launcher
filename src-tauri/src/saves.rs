@@ -1,4 +1,4 @@
-use crate::storage::list_games;
+use crate::storage::{list_games, GameRecord};
 use serde::Serialize;
 use std::fs::{self, File};
 use std::io::Read;
@@ -45,9 +45,16 @@ pub fn scan_game_saves(id: String) -> Result<Vec<SaveFile>, String> {
     let mut files = Vec::new();
 
     for save_root in save_roots.into_iter().filter(|path| path.is_dir()) {
-        collect_files(&save_root, &root, &mut files)?;
+        collect_files(&save_root, &root, "", &mut files)?;
         if files.len() >= MAX_FILES {
             break;
+        }
+    }
+    if files.len() < MAX_FILES {
+        if let Some(external) = game.save_directory.as_deref().map(PathBuf::from) {
+            if external.is_dir() {
+                collect_files(&external, &external, "external", &mut files)?;
+            }
         }
     }
 
@@ -73,11 +80,7 @@ pub fn backup_game_saves(id: String) -> Result<BackupResult, String> {
     fs::create_dir_all(&backup_directory).map_err(io_error)?;
 
     for file in &files {
-        let source = root.join(&file.relative_path);
-        let canonical_source = fs::canonicalize(&source).map_err(io_error)?;
-        if !canonical_source.starts_with(&root) || !canonical_source.is_file() {
-            return Err("Une sauvegarde hors du dossier du jeu a été refusée.".to_string());
-        }
+        let canonical_source = resolve_save_path(&game, &root, Path::new(&file.relative_path))?;
         let target = backup_directory.join(&file.relative_path);
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(io_error)?;
@@ -139,7 +142,7 @@ pub fn restore_backup(id: String, directory: String) -> Result<BackupResult, Str
                 "Le backup contient un chemin qui n’est pas une sauvegarde autorisée.".to_string(),
             );
         }
-        let target = game_root.join(relative);
+        let target = save_target_path(&game, &game_root, relative)?;
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(io_error)?;
         }
@@ -162,7 +165,8 @@ pub fn restore_backup(id: String, directory: String) -> Result<BackupResult, Str
 
 fn collect_files(
     directory: &Path,
-    game_root: &Path,
+    relative_root: &Path,
+    prefix: &str,
     files: &mut Vec<SaveFile>,
 ) -> Result<(), String> {
     if files.len() >= MAX_FILES {
@@ -177,15 +181,11 @@ fn collect_files(
         let entry = entry.map_err(io_error)?;
         let path = entry.path();
         if path.is_dir() {
-            collect_files(&path, game_root, files)?;
+            collect_files(&path, relative_root, prefix, files)?;
         } else if path.is_file() {
             let metadata = fs::metadata(&path).map_err(io_error)?;
             files.push(SaveFile {
-                relative_path: path
-                    .strip_prefix(game_root)
-                    .unwrap_or(&path)
-                    .display()
-                    .to_string(),
+                relative_path: prefixed_relative_path(&path, relative_root, prefix),
                 size: metadata.len(),
                 modified_at: modified_timestamp(&metadata),
                 hash: hash_file(&path)?,
@@ -254,9 +254,79 @@ fn collect_paths(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), Strin
 
 fn is_save_relative_path(path: &Path) -> bool {
     let value = path.to_string_lossy().replace('\\', "/");
-    value.starts_with("game/saves/")
+    value.starts_with("external/")
+        || value.starts_with("game/saves/")
         || value.starts_with("saves/")
         || value.starts_with("game/persistent/")
+}
+
+pub(crate) fn resolve_save_path(
+    game: &GameRecord,
+    game_root: &Path,
+    relative: &Path,
+) -> Result<PathBuf, String> {
+    let value = relative.to_string_lossy().replace('\\', "/");
+    let (base, child) = save_base_and_child(game, game_root, &value)?;
+    let base = fs::canonicalize(base).map_err(io_error)?;
+    let candidate = base.join(child);
+    let canonical = fs::canonicalize(&candidate).map_err(io_error)?;
+    if !canonical.starts_with(&base) || !canonical.is_file() {
+        return Err("Une sauvegarde hors des dossiers autorisés a été refusée.".to_string());
+    }
+    Ok(canonical)
+}
+
+fn save_target_path(
+    game: &GameRecord,
+    game_root: &Path,
+    relative: &Path,
+) -> Result<PathBuf, String> {
+    let value = relative.to_string_lossy().replace('\\', "/");
+    let (base, child) = save_base_and_child(game, game_root, &value)?;
+    let child_path = Path::new(child);
+    if child_path.is_absolute()
+        || child_path
+            .components()
+            .any(|component| component == std::path::Component::ParentDir)
+    {
+        return Err("Un chemin de restauration non autorisé a été refusé.".to_string());
+    }
+    Ok(PathBuf::from(base).join(child_path))
+}
+
+fn save_base_and_child<'a>(
+    game: &'a GameRecord,
+    game_root: &'a Path,
+    value: &'a str,
+) -> Result<(&'a str, &'a str), String> {
+    if let Some(child) = value.strip_prefix("external/") {
+        Ok((
+            game.save_directory
+                .as_deref()
+                .ok_or_else(|| "Le dossier AppData de sauvegarde est introuvable.".to_string())?,
+            child,
+        ))
+    } else {
+        Ok((
+            game_root
+                .to_str()
+                .ok_or_else(|| "Chemin du jeu invalide.".to_string())?,
+            value,
+        ))
+    }
+}
+
+fn prefixed_relative_path(path: &Path, relative_root: &Path, prefix: &str) -> String {
+    let relative = path
+        .strip_prefix(relative_root)
+        .unwrap_or(path)
+        .display()
+        .to_string();
+    if prefix.is_empty() {
+        relative
+    } else {
+        format!("{prefix}/{relative}")
+    }
 }
 
 fn temporary_path(target: &Path) -> PathBuf {
