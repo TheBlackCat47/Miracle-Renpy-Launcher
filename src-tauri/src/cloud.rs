@@ -251,13 +251,13 @@ pub fn verify_google_drive() -> Result<DriveStatus, String> {
     })
 }
 
-fn access_token() -> Result<String, String> {
+pub(crate) fn access_token() -> Result<String, String> {
     keyring_entry(ACCESS_TOKEN_KEY)?
         .get_password()
         .map_err(|_| "Connectez d’abord un compte Google.".to_string())
 }
 
-fn refresh_access_token() -> Result<String, String> {
+pub(crate) fn refresh_access_token() -> Result<String, String> {
     let client_id = get_setting("google.client_id")?
         .ok_or_else(|| "Identifiant client Google manquant.".to_string())?;
     let refresh_token = keyring_entry(REFRESH_TOKEN_KEY)?
@@ -280,6 +280,24 @@ fn refresh_access_token() -> Result<String, String> {
         .set_password(&token.access_token)
         .map_err(|error| format!("Impossible de sécuriser le nouveau token : {error}"))?;
     Ok(token.access_token)
+}
+
+pub(crate) fn valid_access_token() -> Result<String, String> {
+    let token = access_token()?;
+    let response = Client::new()
+        .get("https://www.googleapis.com/drive/v3/about")
+        .query(&[("fields", "user(emailAddress)")])
+        .bearer_auth(&token)
+        .send()
+        .map_err(|error| format!("Google Drive est inaccessible : {error}"))?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        refresh_access_token()
+    } else {
+        response
+            .error_for_status()
+            .map_err(|error| format!("Google Drive a refusé la requête : {error}"))?;
+        Ok(token)
+    }
 }
 
 fn keyring_entry(key: &str) -> Result<Entry, String> {

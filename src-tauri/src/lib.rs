@@ -3,6 +3,7 @@ mod commands;
 mod process;
 mod saves;
 mod storage;
+mod sync;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,7 +23,8 @@ pub fn run() {
             cloud::save_google_client_id,
             cloud::start_google_auth,
             cloud::disconnect_google,
-            cloud::verify_google_drive
+            cloud::verify_google_drive,
+            sync::sync_game_to_drive
         ])
         .run(tauri::generate_context!())
         .expect("error while running Miracle Ren'Py Launcher");

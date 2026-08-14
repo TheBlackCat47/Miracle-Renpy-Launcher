@@ -69,6 +69,12 @@
     storage_used: string | null;
   };
 
+  type SyncResult = {
+    uploaded_files: number;
+    folder_name: string;
+    manifest_file_id: string;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
@@ -86,6 +92,7 @@
   let googleClientId = import.meta.env.ID_client ?? '';
   let cloudStatus: CloudStatus | null = null;
   let cloudMessage = '';
+  let syncMessages: Record<string, string> = {};
 
   onMount(() => {
     let timer: number | undefined;
@@ -279,6 +286,21 @@
     }
   }
 
+  async function syncGame(id: string) {
+    error = '';
+    syncMessages = { ...syncMessages, [id]: 'Synchronisation en cours…' };
+    try {
+      const result = await invoke<SyncResult>('sync_game_to_drive', { id });
+      syncMessages = {
+        ...syncMessages,
+        [id]: `${result.uploaded_files} fichier${result.uploaded_files === 1 ? '' : 's'} envoyé${result.uploaded_files === 1 ? '' : 's'} dans Drive`,
+      };
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+      syncMessages = { ...syncMessages, [id]: '' };
+    }
+  }
+
   function formatBytes(bytes: number) {
     if (bytes < 1024) return `${bytes} o`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
@@ -398,11 +420,15 @@
                 {loadingSaves === game.id ? 'Analyse en cours…' : expandedGame === game.id ? 'Masquer les sauvegardes' : 'Voir les sauvegardes'}
               </button>
               <button class="backup-button" on:click={() => backupSaves(game.id)}>Créer un backup local</button>
+              <button class="backup-button" disabled={!cloudStatus?.connected} on:click={() => syncGame(game.id)}>Synchroniser vers Drive</button>
               <button class="backup-button" on:click={() => loadBackups(game.id)}>
                 {loadingBackups === game.id ? 'Chargement…' : 'Historique des backups'}
               </button>
               {#if backupMessages[game.id]}
                 <span class="backup-message">{backupMessages[game.id]}</span>
+              {/if}
+              {#if syncMessages[game.id]}
+                <span class="backup-message">{syncMessages[game.id]}</span>
               {/if}
               {#if backups[game.id]?.length}
                 <div class="backup-history">
