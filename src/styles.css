@@ -39,4 +39,18 @@ h1 { margin-bottom: 0; font-size: 34px; letter-spacing: -.03em; }
 .empty-icon { width: 68px; height: 68px; display: grid; place-items: center; margin-bottom: 22px; border: 1px solid #604e31; border-radius: 22px; color: #d6ad68; background: #242019; font-size: 28px; }
 .empty-state h2 { margin-bottom: 9px; font-size: 22px; }
 .empty-state p { max-width: 360px; margin-bottom: 22px; color: #858ea0; line-height: 1.6; font-size: 14px; }
+.add-panel { width: min(680px, 100%); margin: auto; padding: 28px; border: 1px solid #303746; border-radius: 14px; background: #181d28; }
+.add-panel h2 { margin-bottom: 8px; font-size: 22px; }
+.add-panel p:not(.eyebrow) { color: #858ea0; line-height: 1.5; font-size: 14px; }
+.add-panel form { margin-top: 24px; }
+.add-panel label { display: block; margin-bottom: 8px; color: #aeb6c6; font-size: 12px; }
+.path-row { display: flex; gap: 10px; }
+.path-row input { min-width: 0; flex: 1; padding: 12px 13px; border: 1px solid #3a4252; border-radius: 8px; outline: 0; color: #f3f5f8; background: #10131b; }
+.path-row input:focus { border-color: #d6ad68; }
+.inspection-result { display: grid; gap: 7px; margin-top: 22px; padding: 15px; border-radius: 9px; font-size: 13px; }
+.inspection-result.valid { border: 1px solid #3b654f; color: #a9dfbd; background: #17271f; }
+.inspection-result.invalid { border: 1px solid #684244; color: #e6abad; background: #2b1c1f; }
+.inspection-result span { color: #a8b0bf; font-size: 12px; }
+.text-button { margin-top: 20px; padding: 0; border: 0; color: #9da5b6; background: transparent; font-size: 12px; }
+.text-button:hover { color: #f3f5f8; }
 .content-footer { display: flex; gap: 8px; color: #687184; font-size: 11px; }

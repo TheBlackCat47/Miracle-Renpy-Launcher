@@ -8,8 +8,22 @@
     data_directory: string;
   };
 
+  type GameInspection = {
+    path: string;
+    folder_name: string;
+    is_renpy: boolean;
+    confidence: 'high' | 'medium' | 'none';
+    executable: string | null;
+    identity_hint: string;
+    save_directories: string[];
+    markers: string[];
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
+  let showAddPanel = false;
+  let gamePath = '';
+  let inspection: GameInspection | null = null;
 
   async function loadStatus() {
     error = '';
@@ -21,7 +35,19 @@
   }
 
   function addGame() {
-    error = 'La détection des jeux sera disponible dans le prochain incrément.';
+    showAddPanel = true;
+    error = '';
+    inspection = null;
+  }
+
+  async function inspectGame() {
+    error = '';
+    inspection = null;
+    try {
+      inspection = await invoke<GameInspection>('inspect_game_directory', { path: gamePath });
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    }
   }
 </script>
 
@@ -66,12 +92,38 @@
       <div class="notice" role="status">{error}</div>
     {/if}
 
-    <div class="empty-state">
+    {#if showAddPanel}
+      <div class="add-panel">
+        <div>
+          <p class="eyebrow">Nouveau jeu</p>
+          <h2>Inspecter un dossier Ren'Py</h2>
+          <p>Indiquez le chemin du dossier qui contient le jeu et son dossier <code>game/</code>.</p>
+        </div>
+        <form on:submit|preventDefault={inspectGame}>
+          <label for="game-path">Chemin du jeu</label>
+          <div class="path-row">
+            <input id="game-path" bind:value={gamePath} placeholder="C:\\Jeux\\MonJeu" autocomplete="off" />
+            <button class="primary" type="submit">Analyser</button>
+          </div>
+        </form>
+        {#if inspection}
+          <div class:valid={inspection.is_renpy} class:invalid={!inspection.is_renpy} class="inspection-result">
+            <strong>{inspection.is_renpy ? 'Jeu Ren\'Py détecté' : 'Structure Ren\'Py non confirmée'}</strong>
+            <span>Confiance : {inspection.confidence}</span>
+            <span>Marqueurs : {inspection.markers.join(', ') || 'aucun'}</span>
+            <span>Sauvegardes : {inspection.save_directories.length || 'aucune détectée'}</span>
+          </div>
+        {/if}
+        <button class="text-button" on:click={() => (showAddPanel = false)}>Retour à la bibliothèque</button>
+      </div>
+    {:else}
+      <div class="empty-state">
       <div class="empty-icon">✦</div>
       <h2>Votre bibliothèque est vide</h2>
       <p>Ajoutez un jeu Ren'Py pour commencer à gérer vos sauvegardes localement.</p>
       <button class="secondary" on:click={addGame}>Ajouter mon premier jeu</button>
-    </div>
+      </div>
+    {/if}
 
     <footer class="content-footer">
       <span>Local First</span>
