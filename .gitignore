@@ -1,0 +1,31 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Rust
+/target/
+
+# Node / Svelte / Vite
+node_modules/
+dist/
+.svelte-kit/
+.vite/
+
+# Tauri build output
+src-tauri/target/
+src-tauri/gen/
+
+# Editors and OS files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local application data
+*.sqlite
+*.sqlite3
+*.db
+logs/
+backups/
