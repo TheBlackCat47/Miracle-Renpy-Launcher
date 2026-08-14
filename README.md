@@ -21,3 +21,12 @@ npm run tauri build         # create Windows executable, MSI and NSIS bundles
 ```
 
 The GitHub Actions workflow runs the frontend/Rust checks and stores Windows build artifacts for pushes to `main`.
+
+To publish a Windows release, create and push a semantic-version tag such as `v0.2.0`:
+
+```powershell
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The release workflow builds the application and attaches the executable, MSI and NSIS installer to a GitHub Release.

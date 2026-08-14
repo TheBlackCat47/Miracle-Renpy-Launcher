@@ -1,0 +1,55 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish Windows release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Align package versions with the tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:RELEASE_TAG.TrimStart('v')
+          npm version $version --no-git-tag-version
+          $configPath = 'src-tauri/tauri.conf.json'
+          $config = Get-Content $configPath -Raw | ConvertFrom-Json
+          $config.version = $version
+          $config | ConvertTo-Json -Depth 20 | Set-Content $configPath -Encoding utf8
+
+      - run: npm ci
+      - run: npm run tauri build
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $assets = @(
+            Get-ChildItem 'src-tauri/target/release/bundle/msi/*.msi'
+            Get-ChildItem 'src-tauri/target/release/bundle/nsis/*-setup.exe'
+            Get-Item 'src-tauri/target/release/miracle-renpy-launcher.exe'
+          ) | ForEach-Object { $_.FullName }
+          gh release create $env:RELEASE_TAG `
+            $assets `
+            --repo $env:GITHUB_REPOSITORY `
+            --title "Miracle Ren'Py Launcher $env:RELEASE_TAG" `
+            --generate-notes
