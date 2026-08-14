@@ -63,6 +63,12 @@
     account_email: string | null;
   };
 
+  type DriveStatus = {
+    email: string;
+    display_name: string | null;
+    storage_used: string | null;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
@@ -164,6 +170,18 @@
       cloudMessage = 'Compte Google déconnecté.';
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
+
+  async function verifyGoogleDrive() {
+    error = '';
+    cloudMessage = 'Vérification de Google Drive…';
+    try {
+      const drive = await invoke<DriveStatus>('verify_google_drive');
+      cloudMessage = `Google Drive opérationnel pour ${drive.email}.`;
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+      cloudMessage = '';
     }
   }
 
@@ -325,6 +343,7 @@
         </form>
         <div class="cloud-actions">
           <button class="secondary" disabled={!cloudStatus?.configured || cloudStatus?.connected} on:click={connectGoogle}>Se connecter avec Google</button>
+          <button class="secondary" disabled={!cloudStatus?.connected} on:click={verifyGoogleDrive}>Tester Google Drive</button>
           <button class="text-button" disabled={!cloudStatus?.connected} on:click={disconnectGoogle}>Déconnecter le compte</button>
         </div>
         {#if cloudMessage}<div class="backup-message">{cloudMessage}</div>{/if}

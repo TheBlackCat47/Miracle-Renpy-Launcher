@@ -45,6 +45,34 @@ struct UserInfo {
     email: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct DriveStatus {
+    pub email: String,
+    pub display_name: Option<String>,
+    pub storage_used: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DriveAbout {
+    user: DriveUser,
+    #[serde(rename = "storageQuota")]
+    storage_quota: Option<DriveQuota>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DriveUser {
+    #[serde(rename = "emailAddress")]
+    email_address: String,
+    #[serde(rename = "displayName")]
+    display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DriveQuota {
+    #[serde(rename = "usage")]
+    usage: Option<String>,
+}
+
 #[tauri::command]
 pub fn get_cloud_status() -> Result<CloudStatus, String> {
     let provider = GoogleDriveProvider;
@@ -94,7 +122,10 @@ pub fn start_google_auth() -> Result<CloudStatus, String> {
         .append_pair("client_id", &client_id)
         .append_pair("redirect_uri", &redirect_uri)
         .append_pair("response_type", "code")
-        .append_pair("scope", "https://www.googleapis.com/auth/drive.file")
+        .append_pair(
+            "scope",
+            "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly",
+        )
         .append_pair("access_type", "offline")
         .append_pair("prompt", "consent")
         .append_pair("state", &state)
@@ -177,6 +208,78 @@ pub fn disconnect_google() -> Result<CloudStatus, String> {
     }
     set_setting("google.account_email", "")?;
     get_cloud_status()
+}
+
+#[tauri::command]
+pub fn verify_google_drive() -> Result<DriveStatus, String> {
+    let token = access_token()?;
+    let response = Client::new()
+        .get("https://www.googleapis.com/drive/v3/about")
+        .query(&[(
+            "fields",
+            "user(emailAddress,displayName),storageQuota(usage)",
+        )])
+        .bearer_auth(&token)
+        .send()
+        .map_err(|error| format!("Google Drive est inaccessible : {error}"))?;
+
+    let response = if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        let refreshed = refresh_access_token()?;
+        Client::new()
+            .get("https://www.googleapis.com/drive/v3/about")
+            .query(&[(
+                "fields",
+                "user(emailAddress,displayName),storageQuota(usage)",
+            )])
+            .bearer_auth(refreshed)
+            .send()
+            .map_err(|error| {
+                format!("Google Drive est inaccessible après renouvellement : {error}")
+            })?
+    } else {
+        response
+    };
+    let about = response
+        .error_for_status()
+        .map_err(|error| format!("Google Drive a refusé la requête : {error}"))?
+        .json::<DriveAbout>()
+        .map_err(|error| format!("Réponse Google Drive invalide : {error}"))?;
+    Ok(DriveStatus {
+        email: about.user.email_address,
+        display_name: about.user.display_name,
+        storage_used: about.storage_quota.and_then(|quota| quota.usage),
+    })
+}
+
+fn access_token() -> Result<String, String> {
+    keyring_entry(ACCESS_TOKEN_KEY)?
+        .get_password()
+        .map_err(|_| "Connectez d’abord un compte Google.".to_string())
+}
+
+fn refresh_access_token() -> Result<String, String> {
+    let client_id = get_setting("google.client_id")?
+        .ok_or_else(|| "Identifiant client Google manquant.".to_string())?;
+    let refresh_token = keyring_entry(REFRESH_TOKEN_KEY)?
+        .get_password()
+        .map_err(|_| "Refresh token Google manquant. Reconnectez le compte.".to_string())?;
+    let token = Client::new()
+        .post("https://oauth2.googleapis.com/token")
+        .form(&[
+            ("client_id", client_id.as_str()),
+            ("refresh_token", refresh_token.as_str()),
+            ("grant_type", "refresh_token"),
+        ])
+        .send()
+        .map_err(|error| format!("Renouvellement Google impossible : {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Google a refusé le renouvellement : {error}"))?
+        .json::<TokenResponse>()
+        .map_err(|error| format!("Réponse de renouvellement invalide : {error}"))?;
+    keyring_entry(ACCESS_TOKEN_KEY)?
+        .set_password(&token.access_token)
+        .map_err(|error| format!("Impossible de sécuriser le nouveau token : {error}"))?;
+    Ok(token.access_token)
 }
 
 fn keyring_entry(key: &str) -> Result<Entry, String> {

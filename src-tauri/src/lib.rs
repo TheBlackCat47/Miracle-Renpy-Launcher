@@ -21,7 +21,8 @@ pub fn run() {
             cloud::get_cloud_status,
             cloud::save_google_client_id,
             cloud::start_google_auth,
-            cloud::disconnect_google
+            cloud::disconnect_google,
+            cloud::verify_google_drive
         ])
         .run(tauri::generate_context!())
         .expect("error while running Miracle Ren'Py Launcher");
