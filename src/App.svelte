@@ -37,6 +37,13 @@
     elapsed_seconds: number;
   };
 
+  type SaveFile = {
+    relative_path: string;
+    size: number;
+    modified_at: string;
+    hash: string;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
@@ -44,6 +51,9 @@
   let inspection: GameInspection | null = null;
   let games: GameRecord[] = [];
   let runningIds: string[] = [];
+  let expandedGame = '';
+  let saveFiles: Record<string, SaveFile[]> = {};
+  let loadingSaves = '';
 
   onMount(() => {
     let timer: number | undefined;
@@ -117,6 +127,30 @@
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
     }
+  }
+
+  async function toggleSaves(id: string) {
+    if (expandedGame === id) {
+      expandedGame = '';
+      return;
+    }
+    expandedGame = id;
+    loadingSaves = id;
+    error = '';
+    try {
+      saveFiles[id] = await invoke<SaveFile[]>('scan_game_saves', { id });
+      saveFiles = { ...saveFiles };
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    } finally {
+      loadingSaves = '';
+    }
+  }
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024) return `${bytes} o`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
   }
 </script>
 
@@ -206,6 +240,23 @@
               <button class:running={runningIds.includes(game.id)} class="launch-button" disabled={!game.executable || runningIds.includes(game.id)} on:click={() => launchGame(game.id)}>
                 {runningIds.includes(game.id) ? 'Jeu en cours' : 'Lancer le jeu'}
               </button>
+              <button class="save-button" on:click={() => toggleSaves(game.id)}>
+                {loadingSaves === game.id ? 'Analyse en cours…' : expandedGame === game.id ? 'Masquer les sauvegardes' : 'Voir les sauvegardes'}
+              </button>
+              {#if expandedGame === game.id}
+                <div class="save-list">
+                  {#if saveFiles[game.id]?.length}
+                    {#each saveFiles[game.id] as save}
+                      <div class="save-row">
+                        <span title={save.relative_path}>{save.relative_path}</span>
+                        <small>{formatBytes(save.size)} · {save.hash.slice(0, 10)}</small>
+                      </div>
+                    {/each}
+                  {:else}
+                    <span class="no-saves">Aucune sauvegarde détectée.</span>
+                  {/if}
+                </div>
+              {/if}
             </div>
           </article>
         {/each}

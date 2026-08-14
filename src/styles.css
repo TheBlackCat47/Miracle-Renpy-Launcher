@@ -50,6 +50,13 @@ h1 { margin-bottom: 0; font-size: 34px; letter-spacing: -.03em; }
 .launch-button:hover:not(:disabled) { background: #2d281f; }
 .launch-button:disabled { cursor: default; opacity: .55; }
 .launch-button.running { border-color: #3b654f; color: #a9dfbd; background: #17271f; }
+.save-button { width: 100%; margin-top: 8px; padding: 8px; border: 0; color: #8f99ac; background: transparent; font-size: 11px; }
+.save-button:hover { color: #e0b978; }
+.save-list { display: grid; gap: 7px; max-height: 180px; overflow: auto; margin-top: 8px; padding-top: 10px; border-top: 1px solid #2b3240; }
+.save-row { display: flex; justify-content: space-between; gap: 10px; color: #adb5c3; font-size: 11px; }
+.save-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.save-row small { flex-shrink: 0; color: #6f788a; font-size: 10px; }
+.no-saves { color: #727d90; font-size: 11px; }
 .empty-icon { width: 68px; height: 68px; display: grid; place-items: center; margin-bottom: 22px; border: 1px solid #604e31; border-radius: 22px; color: #d6ad68; background: #242019; font-size: 28px; }
 .empty-state h2 { margin-bottom: 9px; font-size: 22px; }
 .empty-state p { max-width: 360px; margin-bottom: 22px; color: #858ea0; line-height: 1.6; font-size: 14px; }
