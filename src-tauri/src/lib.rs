@@ -1,4 +1,5 @@
 mod commands;
+mod process;
 mod storage;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -8,7 +9,9 @@ pub fn run() {
             commands::get_system_status,
             commands::inspect_game_directory,
             storage::list_games,
-            storage::register_game
+            storage::register_game,
+            process::launch_game,
+            process::get_running_games
         ])
         .run(tauri::generate_context!())
         .expect("error while running Miracle Ren'Py Launcher");

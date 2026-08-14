@@ -31,20 +31,44 @@
     added_at: string;
   };
 
+  type RunningGame = {
+    id: string;
+    name: string;
+    elapsed_seconds: number;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
   let gamePath = '';
   let inspection: GameInspection | null = null;
   let games: GameRecord[] = [];
+  let runningIds: string[] = [];
 
-  onMount(async () => {
+  onMount(() => {
+    let timer: number | undefined;
+    void (async () => {
+      try {
+        games = await invoke<GameRecord[]>('list_games');
+        await refreshRunningGames();
+        timer = window.setInterval(refreshRunningGames, 2000);
+      } catch (reason) {
+        error = reason instanceof Error ? reason.message : String(reason);
+      }
+    })();
+    return () => {
+      if (timer !== undefined) window.clearInterval(timer);
+    };
+  });
+
+  async function refreshRunningGames() {
     try {
-      games = await invoke<GameRecord[]>('list_games');
+      const running = await invoke<RunningGame[]>('get_running_games');
+      runningIds = running.map((game) => game.id);
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
     }
-  });
+  }
 
   async function loadStatus() {
     error = '';
@@ -80,6 +104,16 @@
       showAddPanel = false;
       inspection = null;
       gamePath = '';
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
+
+  async function launchGame(id: string) {
+    error = '';
+    try {
+      await invoke<RunningGame>('launch_game', { id });
+      await refreshRunningGames();
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
     }
@@ -169,6 +203,9 @@
                 <span>{game.save_count} dossier{game.save_count === 1 ? '' : 's'} de sauvegarde</span>
                 <span>{game.executable ? 'Exécutable détecté' : 'Lancement à configurer'}</span>
               </div>
+              <button class:running={runningIds.includes(game.id)} class="launch-button" disabled={!game.executable || runningIds.includes(game.id)} on:click={() => launchGame(game.id)}>
+                {runningIds.includes(game.id) ? 'Jeu en cours' : 'Lancer le jeu'}
+              </button>
             </div>
           </article>
         {/each}

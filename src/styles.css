@@ -46,6 +46,10 @@ h1 { margin-bottom: 0; font-size: 34px; letter-spacing: -.03em; }
 .game-card-body > p { overflow: hidden; margin: 9px 0 15px; color: #737d91; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .game-meta { display: flex; justify-content: space-between; gap: 10px; color: #a0a8b7; font-size: 11px; }
 .game-meta span:last-child { color: #6f788a; text-align: right; }
+.launch-button { width: 100%; margin-top: 16px; padding: 10px; border: 1px solid #66502f; border-radius: 7px; color: #e2bd78; background: transparent; font-size: 12px; }
+.launch-button:hover:not(:disabled) { background: #2d281f; }
+.launch-button:disabled { cursor: default; opacity: .55; }
+.launch-button.running { border-color: #3b654f; color: #a9dfbd; background: #17271f; }
 .empty-icon { width: 68px; height: 68px; display: grid; place-items: center; margin-bottom: 22px; border: 1px solid #604e31; border-radius: 22px; color: #d6ad68; background: #242019; font-size: 28px; }
 .empty-state h2 { margin-bottom: 9px; font-size: 22px; }
 .empty-state p { max-width: 360px; margin-bottom: 22px; color: #858ea0; line-height: 1.6; font-size: 14px; }
