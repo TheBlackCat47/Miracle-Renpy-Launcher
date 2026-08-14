@@ -18,7 +18,8 @@
         "minWidth": 960,
         "minHeight": 640,
         "resizable": true,
-        "additionalBrowserArgs": "--disable-gpu"
+        "additionalBrowserArgs": "--disable-gpu",
+        "dataDirectory": "webview-no-gpu"
       }
     ],
     "security": { "csp": null }
