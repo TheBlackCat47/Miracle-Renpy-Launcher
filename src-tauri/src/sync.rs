@@ -3,8 +3,10 @@ use crate::saves::scan_game_saves;
 use crate::storage::list_games;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
+use std::process;
 
 const DRIVE_FILES_URL: &str = "https://www.googleapis.com/drive/v3/files";
 const DRIVE_UPLOAD_URL: &str = "https://www.googleapis.com/upload/drive/v3/files";
@@ -28,7 +30,7 @@ struct DriveFileMetadata<'a> {
     parents: Vec<&'a str>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct SyncManifest {
     version: u32,
     game_id: String,
@@ -36,7 +38,7 @@ struct SyncManifest {
     files: Vec<ManifestFile>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ManifestFile {
     relative_path: String,
     size: u64,
@@ -50,6 +52,13 @@ pub struct SyncResult {
     pub uploaded_files: usize,
     pub folder_name: String,
     pub manifest_file_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PullResult {
+    pub downloaded_files: usize,
+    pub unchanged_files: usize,
+    pub backup_directory: Option<String>,
 }
 
 #[tauri::command]
@@ -118,6 +127,78 @@ pub fn sync_game_to_drive(id: String) -> Result<SyncResult, String> {
     })
 }
 
+#[tauri::command]
+pub fn sync_game_from_drive(id: String) -> Result<PullResult, String> {
+    let game = list_games()?
+        .into_iter()
+        .find(|game| game.id == id)
+        .ok_or_else(|| "Jeu introuvable dans la bibliothèque.".to_string())?;
+    let root = fs::canonicalize(&game.path)
+        .map_err(|error| format!("Dossier du jeu inaccessible : {error}"))?;
+    let token = valid_access_token()?;
+    let client = Client::new();
+    let app_folder = find_folder(&client, &token, ROOT_FOLDER, None)?
+        .ok_or_else(|| "Aucun dossier MRL n’existe encore dans Google Drive.".to_string())?;
+    let game_folder = find_folder(&client, &token, &game.name, Some(&app_folder))?
+        .ok_or_else(|| "Ce jeu n’a pas encore été synchronisé vers Google Drive.".to_string())?;
+    let manifest_id = find_file(
+        &client,
+        &token,
+        &format!(
+            "name = 'manifest.json' and '{}' in parents and trashed = false",
+            escape_query_value(&game_folder)
+        ),
+    )?
+    .ok_or_else(|| "Le manifeste Drive de ce jeu est introuvable.".to_string())?;
+    let manifest =
+        serde_json::from_slice::<SyncManifest>(&download_file(&client, &token, &manifest_id)?)
+            .map_err(|error| format!("Manifeste Drive invalide : {error}"))?;
+    if manifest.game_id != game.id {
+        return Err("Le manifeste Drive ne correspond pas à ce jeu.".to_string());
+    }
+
+    let local_files: HashMap<String, String> = scan_game_saves(game.id.clone())?
+        .into_iter()
+        .map(|file| (normalize_relative(&file.relative_path), file.hash))
+        .collect();
+    let mut changed = Vec::new();
+    for file in &manifest.files {
+        let relative = safe_relative_path(&file.relative_path)?;
+        if local_files.get(&relative) != Some(&file.hash) {
+            changed.push((file, relative));
+        }
+    }
+    if changed.is_empty() {
+        return Ok(PullResult {
+            downloaded_files: 0,
+            unchanged_files: manifest.files.len(),
+            backup_directory: None,
+        });
+    }
+
+    let backup = crate::saves::backup_game_saves(game.id.clone())?;
+    for (file, relative) in &changed {
+        let target = root.join(relative);
+        let bytes = download_file(&client, &token, &file.remote_file_id)?;
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(io_error)?;
+        }
+        let temporary = temporary_path(&target);
+        fs::write(&temporary, bytes).map_err(io_error)?;
+        if target.exists() {
+            let previous = previous_path(&target);
+            fs::rename(&target, previous).map_err(io_error)?;
+        }
+        fs::rename(&temporary, &target).map_err(io_error)?;
+    }
+
+    Ok(PullResult {
+        downloaded_files: changed.len(),
+        unchanged_files: manifest.files.len() - changed.len(),
+        backup_directory: Some(backup.backup_directory),
+    })
+}
+
 fn ensure_folder(
     client: &Client,
     token: &str,
@@ -148,6 +229,22 @@ fn ensure_folder(
         .send()
         .map_err(drive_error)
         .and_then(parse_file_id)
+}
+
+fn find_folder(
+    client: &Client,
+    token: &str,
+    name: &str,
+    parent: Option<&str>,
+) -> Result<Option<String>, String> {
+    let mut query = format!(
+        "name = '{}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        escape_query_value(name)
+    );
+    if let Some(parent) = parent {
+        query.push_str(&format!(" and '{}' in parents", escape_query_value(parent)));
+    }
+    find_file(client, token, &query)
 }
 
 fn upload_file(
@@ -209,6 +306,26 @@ fn find_file(client: &Client, token: &str, query: &str) -> Result<Option<String>
     Ok(response.files.into_iter().next().map(|file| file.id))
 }
 
+fn download_file(client: &Client, token: &str, id: &str) -> Result<Vec<u8>, String> {
+    client
+        .get(format!("{DRIVE_FILES_URL}/{id}"))
+        .query(&[("alt", "media")])
+        .bearer_auth(token)
+        .send()
+        .map_err(drive_error)
+        .and_then(|response| {
+            response
+                .error_for_status()
+                .map_err(drive_error)
+                .and_then(|response| {
+                    response
+                        .bytes()
+                        .map(|bytes| bytes.to_vec())
+                        .map_err(drive_error)
+                })
+        })
+}
+
 fn parse_file_id(response: reqwest::blocking::Response) -> Result<String, String> {
     response
         .error_for_status()
@@ -226,6 +343,46 @@ fn safe_local_save_path(root: &Path, relative: &str) -> Result<std::path::PathBu
         return Err("Une sauvegarde hors du dossier du jeu a été refusée.".to_string());
     }
     Ok(canonical)
+}
+
+fn safe_relative_path(relative: &str) -> Result<String, String> {
+    let normalized = normalize_relative(relative);
+    let path = Path::new(&normalized);
+    let valid_root = normalized.starts_with("game/saves/")
+        || normalized.starts_with("saves/")
+        || normalized.starts_with("game/persistent/");
+    if !valid_root
+        || path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err(format!("Chemin de sauvegarde Drive refusé : {relative}"));
+    }
+    Ok(normalized)
+}
+
+fn normalize_relative(relative: &str) -> String {
+    relative.replace('\\', "/")
+}
+
+fn temporary_path(target: &Path) -> PathBuf {
+    let mut temporary = target.as_os_str().to_os_string();
+    temporary.push(format!(".tmp-sync-{}", process::id()));
+    PathBuf::from(temporary)
+}
+
+fn previous_path(target: &Path) -> PathBuf {
+    let mut previous = target.as_os_str().to_os_string();
+    previous.push(format!(".pre-sync-{}-{}", process::id(), unix_timestamp()));
+    PathBuf::from(previous)
+}
+
+fn io_error(error: impl std::fmt::Display) -> String {
+    format!("Erreur d’écriture des sauvegardes synchronisées : {error}")
 }
 
 fn escape_query_value(value: &str) -> String {

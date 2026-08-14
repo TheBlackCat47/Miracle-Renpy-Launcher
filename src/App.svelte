@@ -75,6 +75,12 @@
     manifest_file_id: string;
   };
 
+  type PullResult = {
+    downloaded_files: number;
+    unchanged_files: number;
+    backup_directory: string | null;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
@@ -301,6 +307,25 @@
     }
   }
 
+  async function pullGame(id: string) {
+    error = '';
+    syncMessages = { ...syncMessages, [id]: 'Vérification de Drive en cours…' };
+    try {
+      const result = await invoke<PullResult>('sync_game_from_drive', { id });
+      syncMessages = {
+        ...syncMessages,
+        [id]: result.downloaded_files
+          ? `${result.downloaded_files} fichier${result.downloaded_files === 1 ? '' : 's'} restauré${result.downloaded_files === 1 ? '' : 's'} · backup local créé`
+          : `${result.unchanged_files} fichier${result.unchanged_files === 1 ? '' : 's'} déjà à jour`,
+      };
+      saveFiles[id] = await invoke<SaveFile[]>('scan_game_saves', { id });
+      saveFiles = { ...saveFiles };
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+      syncMessages = { ...syncMessages, [id]: '' };
+    }
+  }
+
   function formatBytes(bytes: number) {
     if (bytes < 1024) return `${bytes} o`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
@@ -421,6 +446,7 @@
               </button>
               <button class="backup-button" on:click={() => backupSaves(game.id)}>Créer un backup local</button>
               <button class="backup-button" disabled={!cloudStatus?.connected} on:click={() => syncGame(game.id)}>Synchroniser vers Drive</button>
+              <button class="backup-button" disabled={!cloudStatus?.connected} on:click={() => pullGame(game.id)}>Récupérer depuis Drive</button>
               <button class="backup-button" on:click={() => loadBackups(game.id)}>
                 {loadingBackups === game.id ? 'Chargement…' : 'Historique des backups'}
               </button>

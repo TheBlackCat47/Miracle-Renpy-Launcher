@@ -24,7 +24,8 @@ pub fn run() {
             cloud::start_google_auth,
             cloud::disconnect_google,
             cloud::verify_google_drive,
-            sync::sync_game_to_drive
+            sync::sync_game_to_drive,
+            sync::sync_game_from_drive
         ])
         .run(tauri::generate_context!())
         .expect("error while running Miracle Ren'Py Launcher");
