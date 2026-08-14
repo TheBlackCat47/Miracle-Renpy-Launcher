@@ -36,6 +36,16 @@ h1 { margin-bottom: 0; font-size: 34px; letter-spacing: -.03em; }
 .secondary { padding: 11px 16px; color: #e4c17d; background: #242a38; }
 .notice { margin-top: 28px; padding: 12px 14px; border: 1px solid #604e31; border-radius: 8px; color: #e6c681; background: #2b251b; font-size: 13px; }
 .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; margin-top: 42px; align-content: start; }
+.game-card { overflow: hidden; border: 1px solid #303746; border-radius: 13px; background: #181d28; }
+.game-cover { height: 130px; display: grid; place-items: center; color: #d6ad68; background: radial-gradient(circle at 30% 20%, #493c28, #211e20 58%, #161a23); font-size: 42px; }
+.game-card-body { padding: 16px; }
+.game-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.game-card h2 { overflow: hidden; margin: 0; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+.confidence { padding: 4px 7px; border-radius: 5px; color: #d5b879; background: #2d281f; font-size: 10px; text-transform: uppercase; }
+.game-card-body > p { overflow: hidden; margin: 9px 0 15px; color: #737d91; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.game-meta { display: flex; justify-content: space-between; gap: 10px; color: #a0a8b7; font-size: 11px; }
+.game-meta span:last-child { color: #6f788a; text-align: right; }
 .empty-icon { width: 68px; height: 68px; display: grid; place-items: center; margin-bottom: 22px; border: 1px solid #604e31; border-radius: 22px; color: #d6ad68; background: #242019; font-size: 28px; }
 .empty-state h2 { margin-bottom: 9px; font-size: 22px; }
 .empty-state p { max-width: 360px; margin-bottom: 22px; color: #858ea0; line-height: 1.6; font-size: 14px; }
@@ -51,6 +61,7 @@ h1 { margin-bottom: 0; font-size: 34px; letter-spacing: -.03em; }
 .inspection-result.valid { border: 1px solid #3b654f; color: #a9dfbd; background: #17271f; }
 .inspection-result.invalid { border: 1px solid #684244; color: #e6abad; background: #2b1c1f; }
 .inspection-result span { color: #a8b0bf; font-size: 12px; }
+.register-button { margin-top: 16px; }
 .text-button { margin-top: 20px; padding: 0; border: 0; color: #9da5b6; background: transparent; font-size: 12px; }
 .text-button:hover { color: #f3f5f8; }
 .content-footer { display: flex; gap: 8px; color: #687184; font-size: 11px; }

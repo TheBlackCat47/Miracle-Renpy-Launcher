@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { onMount } from 'svelte';
 
   type SystemStatus = {
     app_name: string;
@@ -19,11 +20,31 @@
     markers: string[];
   };
 
+  type GameRecord = {
+    id: string;
+    name: string;
+    path: string;
+    executable: string | null;
+    confidence: string;
+    save_count: number;
+    identity_hint: string;
+    added_at: string;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
   let gamePath = '';
   let inspection: GameInspection | null = null;
+  let games: GameRecord[] = [];
+
+  onMount(async () => {
+    try {
+      games = await invoke<GameRecord[]>('list_games');
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    }
+  });
 
   async function loadStatus() {
     error = '';
@@ -45,6 +66,20 @@
     inspection = null;
     try {
       inspection = await invoke<GameInspection>('inspect_game_directory', { path: gamePath });
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
+
+  async function registerGame() {
+    if (!inspection?.is_renpy) return;
+    error = '';
+    try {
+      const game = await invoke<GameRecord>('register_game', { path: inspection.path });
+      games = [...games.filter((item) => item.id !== game.id), game];
+      showAddPanel = false;
+      inspection = null;
+      gamePath = '';
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
     }
@@ -113,8 +148,30 @@
             <span>Marqueurs : {inspection.markers.join(', ') || 'aucun'}</span>
             <span>Sauvegardes : {inspection.save_directories.length || 'aucune détectée'}</span>
           </div>
+          {#if inspection.is_renpy}
+            <button class="primary register-button" on:click={registerGame}>Ajouter à ma bibliothèque</button>
+          {/if}
         {/if}
         <button class="text-button" on:click={() => (showAddPanel = false)}>Retour à la bibliothèque</button>
+      </div>
+    {:else if games.length > 0}
+      <div class="game-grid">
+        {#each games as game}
+          <article class="game-card">
+            <div class="game-cover">✦</div>
+            <div class="game-card-body">
+              <div class="game-card-heading">
+                <h2>{game.name}</h2>
+                <span class="confidence">{game.confidence}</span>
+              </div>
+              <p title={game.path}>{game.path}</p>
+              <div class="game-meta">
+                <span>{game.save_count} dossier{game.save_count === 1 ? '' : 's'} de sauvegarde</span>
+                <span>{game.executable ? 'Exécutable détecté' : 'Lancement à configurer'}</span>
+              </div>
+            </div>
+          </article>
+        {/each}
       </div>
     {:else}
       <div class="empty-state">
