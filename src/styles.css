@@ -79,6 +79,8 @@ h1 { margin-bottom: 0; font-size: 34px; letter-spacing: -.03em; }
 .cloud-panel input { padding: 12px 13px; border: 1px solid #3a4252; border-radius: 8px; outline: 0; color: #f3f5f8; background: #10131b; }
 .cloud-panel input:focus { border-color: #d6ad68; }
 .cloud-save { margin-top: 8px; }
+.cloud-actions { display: grid; gap: 8px; margin-top: 18px; }
+.cloud-actions button:disabled { cursor: default; opacity: .45; }
 .add-panel h2 { margin-bottom: 8px; font-size: 22px; }
 .add-panel p:not(.eyebrow) { color: #858ea0; line-height: 1.5; font-size: 14px; }
 .add-panel form { margin-top: 24px; }

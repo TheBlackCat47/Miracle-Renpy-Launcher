@@ -145,6 +145,28 @@
     }
   }
 
+  async function connectGoogle() {
+    error = '';
+    cloudMessage = 'Ouverture de Google…';
+    try {
+      cloudStatus = await invoke<CloudStatus>('start_google_auth');
+      cloudMessage = cloudStatus.connected ? 'Compte Google connecté.' : 'Connexion non finalisée.';
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+      cloudMessage = '';
+    }
+  }
+
+  async function disconnectGoogle() {
+    error = '';
+    try {
+      cloudStatus = await invoke<CloudStatus>('disconnect_google');
+      cloudMessage = 'Compte Google déconnecté.';
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
+
   async function inspectGame() {
     error = '';
     inspection = null;
@@ -301,6 +323,10 @@
           <input id="google-client-id" bind:value={googleClientId} placeholder="123456.apps.googleusercontent.com" autocomplete="off" />
           <button class="primary cloud-save" type="submit">Enregistrer la configuration</button>
         </form>
+        <div class="cloud-actions">
+          <button class="secondary" disabled={!cloudStatus?.configured || cloudStatus?.connected} on:click={connectGoogle}>Se connecter avec Google</button>
+          <button class="text-button" disabled={!cloudStatus?.connected} on:click={disconnectGoogle}>Déconnecter le compte</button>
+        </div>
         {#if cloudMessage}<div class="backup-message">{cloudMessage}</div>{/if}
         <button class="text-button" on:click={() => (showCloudPanel = false)}>Retour à la bibliothèque</button>
       </div>
