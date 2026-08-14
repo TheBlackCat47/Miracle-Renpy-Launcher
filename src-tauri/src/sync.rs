@@ -1,6 +1,6 @@
 use crate::cloud::valid_access_token;
 use crate::saves::scan_game_saves;
-use crate::storage::list_games;
+use crate::storage::{get_setting, list_games, set_setting};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -59,6 +59,7 @@ pub struct PullResult {
     pub downloaded_files: usize,
     pub unchanged_files: usize,
     pub backup_directory: Option<String>,
+    pub conflicts: Vec<String>,
 }
 
 #[tauri::command]
@@ -119,6 +120,7 @@ pub fn sync_game_to_drive(id: String) -> Result<SyncResult, String> {
     );
     let _ = fs::remove_file(&manifest_path);
     let manifest_id = manifest_id?;
+    remember_manifest(&game.id, &manifest)?;
 
     Ok(SyncResult {
         uploaded_files: saves.len(),
@@ -161,18 +163,47 @@ pub fn sync_game_from_drive(id: String) -> Result<PullResult, String> {
         .into_iter()
         .map(|file| (normalize_relative(&file.relative_path), file.hash))
         .collect();
+    let previous = remembered_manifest(&game.id)?;
+    let previous_hashes = previous
+        .as_ref()
+        .map(|manifest| {
+            manifest
+                .files
+                .iter()
+                .map(|file| (normalize_relative(&file.relative_path), file.hash.clone()))
+                .collect::<HashMap<_, _>>()
+        })
+        .unwrap_or_default();
     let mut changed = Vec::new();
+    let mut conflicts = Vec::new();
     for file in &manifest.files {
         let relative = safe_relative_path(&file.relative_path)?;
-        if local_files.get(&relative) != Some(&file.hash) {
+        let local_hash = local_files.get(&relative);
+        if local_hash != Some(&file.hash) {
+            let local_changed = previous_hashes
+                .get(&relative)
+                .map(|previous_hash| local_hash != Some(previous_hash))
+                .unwrap_or(false);
+            let remote_changed = previous_hashes
+                .get(&relative)
+                .map(|previous_hash| previous_hash != &file.hash)
+                .unwrap_or(false);
+            if local_changed && remote_changed {
+                conflicts.push(relative);
+                continue;
+            }
             changed.push((file, relative));
         }
     }
     if changed.is_empty() {
+        if conflicts.is_empty() {
+            remember_manifest(&game.id, &manifest)?;
+        }
         return Ok(PullResult {
             downloaded_files: 0,
-            unchanged_files: manifest.files.len(),
+            unchanged_files: manifest.files.len() - conflicts.len(),
             backup_directory: None,
+            conflicts,
         });
     }
 
@@ -192,10 +223,15 @@ pub fn sync_game_from_drive(id: String) -> Result<PullResult, String> {
         fs::rename(&temporary, &target).map_err(io_error)?;
     }
 
+    if conflicts.is_empty() {
+        remember_manifest(&game.id, &manifest)?;
+    }
+
     Ok(PullResult {
         downloaded_files: changed.len(),
-        unchanged_files: manifest.files.len() - changed.len(),
+        unchanged_files: manifest.files.len() - changed.len() - conflicts.len(),
         backup_directory: Some(backup.backup_directory),
+        conflicts,
     })
 }
 
@@ -383,6 +419,24 @@ fn previous_path(target: &Path) -> PathBuf {
 
 fn io_error(error: impl std::fmt::Display) -> String {
     format!("Erreur d’écriture des sauvegardes synchronisées : {error}")
+}
+
+fn manifest_setting_key(game_id: &str) -> String {
+    format!("sync.last_manifest.{game_id}")
+}
+
+fn remember_manifest(game_id: &str, manifest: &SyncManifest) -> Result<(), String> {
+    let value = serde_json::to_string(manifest).map_err(json_error)?;
+    set_setting(&manifest_setting_key(game_id), &value)
+}
+
+fn remembered_manifest(game_id: &str) -> Result<Option<SyncManifest>, String> {
+    get_setting(&manifest_setting_key(game_id))?
+        .map(|value| {
+            serde_json::from_str(&value)
+                .map_err(|error| format!("Manifeste local mémorisé invalide : {error}"))
+        })
+        .transpose()
 }
 
 fn escape_query_value(value: &str) -> String {

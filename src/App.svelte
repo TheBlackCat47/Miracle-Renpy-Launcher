@@ -79,6 +79,7 @@
     downloaded_files: number;
     unchanged_files: number;
     backup_directory: string | null;
+    conflicts: string[];
   };
 
   let status: SystemStatus | null = null;
@@ -314,9 +315,11 @@
       const result = await invoke<PullResult>('sync_game_from_drive', { id });
       syncMessages = {
         ...syncMessages,
-        [id]: result.downloaded_files
-          ? `${result.downloaded_files} fichier${result.downloaded_files === 1 ? '' : 's'} restauré${result.downloaded_files === 1 ? '' : 's'} · backup local créé`
-          : `${result.unchanged_files} fichier${result.unchanged_files === 1 ? '' : 's'} déjà à jour`,
+        [id]: result.conflicts.length
+          ? `${result.conflicts.length} conflit${result.conflicts.length === 1 ? '' : 's'} détecté${result.conflicts.length === 1 ? '' : 's'} · fichiers protégés`
+          : result.downloaded_files
+            ? `${result.downloaded_files} fichier${result.downloaded_files === 1 ? '' : 's'} restauré${result.downloaded_files === 1 ? '' : 's'} · backup local créé`
+            : `${result.unchanged_files} fichier${result.unchanged_files === 1 ? '' : 's'} déjà à jour`,
       };
       saveFiles[id] = await invoke<SaveFile[]>('scan_game_saves', { id });
       saveFiles = { ...saveFiles };
