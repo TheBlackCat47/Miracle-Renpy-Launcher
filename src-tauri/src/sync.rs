@@ -62,6 +62,12 @@ pub struct PullResult {
     pub conflicts: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ConflictResolutionResult {
+    pub relative_path: String,
+    pub resolution: String,
+}
+
 #[tauri::command]
 pub fn sync_game_to_drive(id: String) -> Result<SyncResult, String> {
     let game = list_games()?
@@ -216,11 +222,7 @@ pub fn sync_game_from_drive(id: String) -> Result<PullResult, String> {
         }
         let temporary = temporary_path(&target);
         fs::write(&temporary, bytes).map_err(io_error)?;
-        if target.exists() {
-            let previous = previous_path(&target);
-            fs::rename(&target, previous).map_err(io_error)?;
-        }
-        fs::rename(&temporary, &target).map_err(io_error)?;
+        replace_local_file(&target, &temporary)?;
     }
 
     if conflicts.is_empty() {
@@ -232,6 +234,84 @@ pub fn sync_game_from_drive(id: String) -> Result<PullResult, String> {
         unchanged_files: manifest.files.len() - changed.len() - conflicts.len(),
         backup_directory: Some(backup.backup_directory),
         conflicts,
+    })
+}
+
+#[tauri::command]
+pub fn resolve_sync_conflict(
+    id: String,
+    relative_path: String,
+    resolution: String,
+) -> Result<ConflictResolutionResult, String> {
+    if resolution != "local" && resolution != "remote" {
+        return Err("Résolution de conflit inconnue.".to_string());
+    }
+    let game = list_games()?
+        .into_iter()
+        .find(|game| game.id == id)
+        .ok_or_else(|| "Jeu introuvable dans la bibliothèque.".to_string())?;
+    let relative = safe_relative_path(&relative_path)?;
+    let root = fs::canonicalize(&game.path)
+        .map_err(|error| format!("Dossier du jeu inaccessible : {error}"))?;
+    let token = valid_access_token()?;
+    let client = Client::new();
+    let app_folder = find_folder(&client, &token, ROOT_FOLDER, None)?
+        .ok_or_else(|| "Aucun dossier MRL n’existe encore dans Google Drive.".to_string())?;
+    let game_folder = find_folder(&client, &token, &game.name, Some(&app_folder))?
+        .ok_or_else(|| "Ce jeu n’a pas encore été synchronisé vers Google Drive.".to_string())?;
+    let manifest_id = find_file(
+        &client,
+        &token,
+        &format!(
+            "name = 'manifest.json' and '{}' in parents and trashed = false",
+            escape_query_value(&game_folder)
+        ),
+    )?
+    .ok_or_else(|| "Le manifeste Drive de ce jeu est introuvable.".to_string())?;
+    let mut manifest =
+        serde_json::from_slice::<SyncManifest>(&download_file(&client, &token, &manifest_id)?)
+            .map_err(|error| format!("Manifeste Drive invalide : {error}"))?;
+    let entry = manifest
+        .files
+        .iter_mut()
+        .find(|file| normalize_relative(&file.relative_path) == relative)
+        .ok_or_else(|| {
+            "Le fichier en conflit n’existe plus dans le manifeste Drive.".to_string()
+        })?;
+    let _backup = crate::saves::backup_game_saves(game.id.clone())?;
+    let source = root.join(&relative);
+    if let Some(parent) = source.parent() {
+        fs::create_dir_all(parent).map_err(io_error)?;
+    }
+    if resolution == "remote" {
+        let bytes = download_file(&client, &token, &entry.remote_file_id)?;
+        let temporary = temporary_path(&source);
+        fs::write(&temporary, bytes).map_err(io_error)?;
+        replace_local_file(&source, &temporary)?;
+    } else {
+        let local = safe_local_save_path(&root, &relative)?;
+        let remote_id = upload_file(
+            &client,
+            &token,
+            &game_folder,
+            &relative,
+            "application/octet-stream",
+            &local,
+        )?;
+        let save = scan_game_saves(game.id.clone())?
+            .into_iter()
+            .find(|file| normalize_relative(&file.relative_path) == relative)
+            .ok_or_else(|| "La sauvegarde locale a disparu pendant la résolution.".to_string())?;
+        entry.size = save.size;
+        entry.modified_at = save.modified_at;
+        entry.hash = save.hash;
+        entry.remote_file_id = remote_id;
+    }
+    upload_manifest(&client, &token, &game_folder, &manifest)?;
+    remember_manifest(&game.id, &manifest)?;
+    Ok(ConflictResolutionResult {
+        relative_path: relative,
+        resolution,
     })
 }
 
@@ -415,6 +495,38 @@ fn previous_path(target: &Path) -> PathBuf {
     let mut previous = target.as_os_str().to_os_string();
     previous.push(format!(".pre-sync-{}-{}", process::id(), unix_timestamp()));
     PathBuf::from(previous)
+}
+
+fn replace_local_file(target: &Path, temporary: &Path) -> Result<(), String> {
+    if target.exists() {
+        fs::rename(target, previous_path(target)).map_err(io_error)?;
+    }
+    fs::rename(temporary, target).map_err(io_error)
+}
+
+fn upload_manifest(
+    client: &Client,
+    token: &str,
+    game_folder: &str,
+    manifest: &SyncManifest,
+) -> Result<String, String> {
+    let manifest_path =
+        std::env::temp_dir().join(format!("mrl-manifest-update-{}.json", process::id()));
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(manifest).map_err(json_error)?,
+    )
+    .map_err(|error| format!("Manifeste local impossible à créer : {error}"))?;
+    let result = upload_file(
+        client,
+        token,
+        game_folder,
+        "manifest.json",
+        "application/json",
+        &manifest_path,
+    );
+    let _ = fs::remove_file(&manifest_path);
+    result
 }
 
 fn io_error(error: impl std::fmt::Display) -> String {

@@ -82,6 +82,11 @@
     conflicts: string[];
   };
 
+  type ConflictResolutionResult = {
+    relative_path: string;
+    resolution: string;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
@@ -100,6 +105,7 @@
   let cloudStatus: CloudStatus | null = null;
   let cloudMessage = '';
   let syncMessages: Record<string, string> = {};
+  let syncConflicts: Record<string, string[]> = {};
 
   onMount(() => {
     let timer: number | undefined;
@@ -321,11 +327,32 @@
             ? `${result.downloaded_files} fichier${result.downloaded_files === 1 ? '' : 's'} restauré${result.downloaded_files === 1 ? '' : 's'} · backup local créé`
             : `${result.unchanged_files} fichier${result.unchanged_files === 1 ? '' : 's'} déjà à jour`,
       };
+      syncConflicts = { ...syncConflicts, [id]: result.conflicts };
       saveFiles[id] = await invoke<SaveFile[]>('scan_game_saves', { id });
       saveFiles = { ...saveFiles };
     } catch (reason) {
       error = reason instanceof Error ? reason.message : String(reason);
       syncMessages = { ...syncMessages, [id]: '' };
+    }
+  }
+
+  async function resolveConflict(id: string, relativePath: string, resolution: 'local' | 'remote') {
+    error = '';
+    try {
+      await invoke<ConflictResolutionResult>('resolve_sync_conflict', {
+        id,
+        relativePath,
+        resolution,
+      });
+      syncConflicts = {
+        ...syncConflicts,
+        [id]: (syncConflicts[id] ?? []).filter((path) => path !== relativePath),
+      };
+      syncMessages = { ...syncMessages, [id]: `Conflit résolu : ${relativePath}` };
+      saveFiles[id] = await invoke<SaveFile[]>('scan_game_saves', { id });
+      saveFiles = { ...saveFiles };
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
     }
   }
 
@@ -458,6 +485,18 @@
               {/if}
               {#if syncMessages[game.id]}
                 <span class="backup-message">{syncMessages[game.id]}</span>
+              {/if}
+              {#if syncConflicts[game.id]?.length}
+                <div class="conflict-list">
+                  <strong>Conflits à résoudre</strong>
+                  {#each syncConflicts[game.id] as conflict}
+                    <div class="conflict-row">
+                      <span title={conflict}>{conflict}</span>
+                      <button on:click={() => resolveConflict(game.id, conflict, 'local')}>Local</button>
+                      <button on:click={() => resolveConflict(game.id, conflict, 'remote')}>Drive</button>
+                    </div>
+                  {/each}
+                </div>
               {/if}
               {#if backups[game.id]?.length}
                 <div class="backup-history">

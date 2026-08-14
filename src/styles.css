@@ -61,6 +61,10 @@ h1 { margin-bottom: 0; font-size: 34px; letter-spacing: -.03em; }
 .backup-button:hover { color: #e0b978; }
 .backup-button:disabled { cursor: default; opacity: .45; }
 .backup-message { display: block; margin-top: 3px; color: #8fc5a4; text-align: center; font-size: 10px; }
+.conflict-list { display: grid; gap: 7px; margin-top: 8px; padding: 9px; border: 1px solid #684244; border-radius: 7px; color: #e6abad; background: #2b1c1f; font-size: 10px; }
+.conflict-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 5px; }
+.conflict-row span { overflow: hidden; color: #c7a2a6; text-overflow: ellipsis; white-space: nowrap; }
+.conflict-row button { padding: 4px 6px; border: 1px solid #765052; border-radius: 4px; color: #f0c4a1; background: transparent; font-size: 10px; }
 .backup-history { display: grid; gap: 7px; margin-top: 7px; padding-top: 8px; border-top: 1px solid #2b3240; }
 .backup-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #8791a3; font-size: 10px; }
 .backup-row button { padding: 4px 7px; border: 1px solid #4a3e2b; border-radius: 5px; color: #d8b575; background: transparent; font-size: 10px; }
