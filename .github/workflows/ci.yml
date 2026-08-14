@@ -13,7 +13,6 @@ jobs:
   rust:
     name: Rust checks
     runs-on: windows-latest
-    if: ${{ hashFiles('**/Cargo.toml') != '' }}
     defaults:
       run:
         working-directory: src-tauri
@@ -29,7 +28,6 @@ jobs:
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('package.json') != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,7 +43,6 @@ jobs:
     name: Windows desktop bundles
     runs-on: windows-latest
     needs: [rust, frontend]
-    if: ${{ hashFiles('package.json', 'src-tauri/Cargo.toml') != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
