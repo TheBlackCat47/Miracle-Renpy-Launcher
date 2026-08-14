@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process;
 use std::time::UNIX_EPOCH;
 
 const MAX_FILES: usize = 5_000;
@@ -13,6 +14,13 @@ pub struct SaveFile {
     pub size: u64,
     pub modified_at: String,
     pub hash: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BackupResult {
+    pub backup_directory: String,
+    pub file_count: usize,
+    pub created_at: String,
 }
 
 #[tauri::command]
@@ -38,6 +46,45 @@ pub fn scan_game_saves(id: String) -> Result<Vec<SaveFile>, String> {
 
     files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
     Ok(files)
+}
+
+#[tauri::command]
+pub fn backup_game_saves(id: String) -> Result<BackupResult, String> {
+    let game = list_games()?
+        .into_iter()
+        .find(|game| game.id == id)
+        .ok_or_else(|| "Jeu introuvable dans la bibliothèque.".to_string())?;
+    let files = scan_game_saves(game.id.clone())?;
+    let root = fs::canonicalize(&game.path).map_err(io_error)?;
+    let timestamp = unix_timestamp();
+    let backup_directory = dirs_next::data_local_dir()
+        .ok_or_else(|| "Impossible de déterminer le dossier de données local.".to_string())?
+        .join("MiracleRenpyLauncher")
+        .join("backups")
+        .join(&game.id)
+        .join(&timestamp);
+    fs::create_dir_all(&backup_directory).map_err(io_error)?;
+
+    for file in &files {
+        let source = root.join(&file.relative_path);
+        let canonical_source = fs::canonicalize(&source).map_err(io_error)?;
+        if !canonical_source.starts_with(&root) || !canonical_source.is_file() {
+            return Err("Une sauvegarde hors du dossier du jeu a été refusée.".to_string());
+        }
+        let target = backup_directory.join(&file.relative_path);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(io_error)?;
+        }
+        let temporary = temporary_path(&target);
+        fs::copy(&canonical_source, &temporary).map_err(io_error)?;
+        fs::rename(&temporary, &target).map_err(io_error)?;
+    }
+
+    Ok(BackupResult {
+        backup_directory: backup_directory.display().to_string(),
+        file_count: files.len(),
+        created_at: timestamp,
+    })
 }
 
 fn collect_files(
@@ -96,6 +143,20 @@ fn modified_timestamp(metadata: &fs::Metadata) -> String {
         .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
         .map(|value| value.as_secs().to_string())
         .unwrap_or_else(|| "0".to_string())
+}
+
+fn unix_timestamp() -> String {
+    std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .to_string()
+}
+
+fn temporary_path(target: &Path) -> PathBuf {
+    let mut temporary = target.as_os_str().to_os_string();
+    temporary.push(format!(".tmp-{}", process::id()));
+    PathBuf::from(temporary)
 }
 
 fn io_error(error: impl std::fmt::Display) -> String {

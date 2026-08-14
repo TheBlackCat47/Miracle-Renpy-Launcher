@@ -44,6 +44,12 @@
     hash: string;
   };
 
+  type BackupResult = {
+    backup_directory: string;
+    file_count: number;
+    created_at: string;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
@@ -54,6 +60,7 @@
   let expandedGame = '';
   let saveFiles: Record<string, SaveFile[]> = {};
   let loadingSaves = '';
+  let backupMessages: Record<string, string> = {};
 
   onMount(() => {
     let timer: number | undefined;
@@ -144,6 +151,19 @@
       error = reason instanceof Error ? reason.message : String(reason);
     } finally {
       loadingSaves = '';
+    }
+  }
+
+  async function backupSaves(id: string) {
+    error = '';
+    try {
+      const result = await invoke<BackupResult>('backup_game_saves', { id });
+      backupMessages = {
+        ...backupMessages,
+        [id]: `${result.file_count} fichier${result.file_count === 1 ? '' : 's'} sauvegardé${result.file_count === 1 ? '' : 's'}`,
+      };
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
     }
   }
 
@@ -243,6 +263,10 @@
               <button class="save-button" on:click={() => toggleSaves(game.id)}>
                 {loadingSaves === game.id ? 'Analyse en cours…' : expandedGame === game.id ? 'Masquer les sauvegardes' : 'Voir les sauvegardes'}
               </button>
+              <button class="backup-button" on:click={() => backupSaves(game.id)}>Créer un backup local</button>
+              {#if backupMessages[game.id]}
+                <span class="backup-message">{backupMessages[game.id]}</span>
+              {/if}
               {#if expandedGame === game.id}
                 <div class="save-list">
                   {#if saveFiles[game.id]?.length}
