@@ -114,6 +114,12 @@
       try {
         games = await invoke<GameRecord[]>('list_games');
         cloudStatus = await invoke<CloudStatus>('get_cloud_status');
+        const configuredClientId = import.meta.env.ID_client?.trim();
+        if (configuredClientId && !cloudStatus.configured) {
+          cloudStatus = await invoke<CloudStatus>('save_google_client_id', {
+            clientId: configuredClientId,
+          });
+        }
         await refreshRunningGames();
         timer = window.setInterval(refreshRunningGames, 2000);
       } catch (reason) {
@@ -414,6 +420,9 @@
           <span class:connected={cloudStatus?.connected}>{cloudStatus?.connected ? 'Compte connecté' : 'Non connecté'}</span>
           <small>{cloudStatus?.provider ?? 'Google Drive'} · {cloudStatus?.configured ? 'Client configuré' : 'Configuration requise'}</small>
         </div>
+        {#if cloudStatus && !cloudStatus.connected}
+          <p class="cloud-hint">Enregistrez la configuration, puis cliquez sur « Se connecter avec Google ». Les boutons Drive resteront désactivés tant que cette étape n’est pas terminée.</p>
+        {/if}
         <form on:submit|preventDefault={saveGoogleClientId}>
           <label for="google-client-id">Identifiant client OAuth Google</label>
           <input id="google-client-id" bind:value={googleClientId} placeholder="123456.apps.googleusercontent.com" autocomplete="off" />
@@ -476,8 +485,8 @@
                 {loadingSaves === game.id ? 'Analyse en cours…' : expandedGame === game.id ? 'Masquer les sauvegardes' : 'Voir les sauvegardes'}
               </button>
               <button class="backup-button" on:click={() => backupSaves(game.id)}>Créer un backup local</button>
-              <button class="backup-button" disabled={!cloudStatus?.connected} on:click={() => syncGame(game.id)}>Synchroniser vers Drive</button>
-              <button class="backup-button" disabled={!cloudStatus?.connected} on:click={() => pullGame(game.id)}>Récupérer depuis Drive</button>
+              <button class="backup-button" disabled={!cloudStatus?.connected} title={cloudStatus?.connected ? 'Envoyer les sauvegardes vers Google Drive' : 'Connectez d’abord un compte Google dans Synchronisation'} on:click={() => syncGame(game.id)}>Synchroniser vers Drive</button>
+              <button class="backup-button" disabled={!cloudStatus?.connected} title={cloudStatus?.connected ? 'Récupérer les sauvegardes depuis Google Drive' : 'Connectez d’abord un compte Google dans Synchronisation'} on:click={() => pullGame(game.id)}>Récupérer depuis Drive</button>
               <button class="backup-button" on:click={() => loadBackups(game.id)}>
                 {loadingBackups === game.id ? 'Chargement…' : 'Historique des backups'}
               </button>

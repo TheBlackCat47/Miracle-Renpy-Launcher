@@ -79,6 +79,7 @@ h1 { margin-bottom: 0; font-size: 34px; letter-spacing: -.03em; }
 .cloud-status { display: flex; align-items: center; justify-content: space-between; margin: 22px 0; padding: 13px; border-radius: 8px; color: #e0b978; background: #2d281f; font-size: 13px; }
 .cloud-status .connected { color: #a9dfbd; }
 .cloud-status small { color: #9ea7b7; font-size: 11px; }
+.cloud-hint { margin: -10px 0 18px; padding: 10px 12px; border: 1px solid #604e31; border-radius: 8px; color: #e6c681 !important; background: #2b251b; font-size: 12px !important; }
 .cloud-panel form { display: grid; gap: 8px; }
 .cloud-panel label { color: #aeb6c6; font-size: 12px; }
 .cloud-panel input { padding: 12px 13px; border: 1px solid #3a4252; border-radius: 8px; outline: 0; color: #f3f5f8; background: #10131b; }
