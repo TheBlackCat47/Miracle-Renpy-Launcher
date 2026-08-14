@@ -1,3 +1,4 @@
+mod cloud;
 mod commands;
 mod process;
 mod saves;
@@ -16,7 +17,9 @@ pub fn run() {
             saves::scan_game_saves,
             saves::backup_game_saves,
             saves::list_backups,
-            saves::restore_backup
+            saves::restore_backup,
+            cloud::get_cloud_status,
+            cloud::save_google_client_id
         ])
         .run(tauri::generate_context!())
         .expect("error while running Miracle Ren'Py Launcher");

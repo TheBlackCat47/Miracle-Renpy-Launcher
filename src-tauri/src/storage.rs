@@ -109,7 +109,7 @@ pub fn register_game(path: String) -> Result<GameRecord, String> {
         .ok_or_else(|| "Le jeu n’a pas pu être relu après son enregistrement.".to_string())
 }
 
-fn open_connection() -> Result<Connection, String> {
+pub(crate) fn open_connection() -> Result<Connection, String> {
     let data_dir = dirs_next::data_local_dir()
         .ok_or_else(|| "Impossible de déterminer le dossier de données local.".to_string())?
         .join("MiracleRenpyLauncher");
@@ -134,11 +134,40 @@ fn open_connection() -> Result<Connection, String> {
                  added_at TEXT NOT NULL,
                  updated_at TEXT NOT NULL
              );
+             CREATE TABLE IF NOT EXISTS settings (
+                 key TEXT PRIMARY KEY NOT NULL,
+                 value TEXT NOT NULL,
+                 updated_at TEXT NOT NULL
+             );
              INSERT OR IGNORE INTO schema_migrations (version, applied_at)
              VALUES (1, strftime('%s', 'now'));",
         )
         .map_err(db_error)?;
     Ok(connection)
+}
+
+pub(crate) fn get_setting(key: &str) -> Result<Option<String>, String> {
+    let connection = open_connection()?;
+    connection
+        .query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(db_error)
+}
+
+pub(crate) fn set_setting(key: &str, value: &str) -> Result<(), String> {
+    let connection = open_connection()?;
+    connection
+        .execute(
+            "INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            params![key, value, unix_timestamp()],
+        )
+        .map_err(db_error)?;
+    Ok(())
 }
 
 fn unix_timestamp() -> String {

@@ -68,6 +68,17 @@ h1 { margin-bottom: 0; font-size: 34px; letter-spacing: -.03em; }
 .empty-state h2 { margin-bottom: 9px; font-size: 22px; }
 .empty-state p { max-width: 360px; margin-bottom: 22px; color: #858ea0; line-height: 1.6; font-size: 14px; }
 .add-panel { width: min(680px, 100%); margin: auto; padding: 28px; border: 1px solid #303746; border-radius: 14px; background: #181d28; }
+.cloud-panel { width: min(680px, 100%); margin: auto; padding: 28px; border: 1px solid #303746; border-radius: 14px; background: #181d28; }
+.cloud-panel h2 { margin-bottom: 8px; font-size: 22px; }
+.cloud-panel > p:not(.eyebrow) { color: #858ea0; line-height: 1.5; font-size: 14px; }
+.cloud-status { display: flex; align-items: center; justify-content: space-between; margin: 22px 0; padding: 13px; border-radius: 8px; color: #e0b978; background: #2d281f; font-size: 13px; }
+.cloud-status .connected { color: #a9dfbd; }
+.cloud-status small { color: #9ea7b7; font-size: 11px; }
+.cloud-panel form { display: grid; gap: 8px; }
+.cloud-panel label { color: #aeb6c6; font-size: 12px; }
+.cloud-panel input { padding: 12px 13px; border: 1px solid #3a4252; border-radius: 8px; outline: 0; color: #f3f5f8; background: #10131b; }
+.cloud-panel input:focus { border-color: #d6ad68; }
+.cloud-save { margin-top: 8px; }
 .add-panel h2 { margin-bottom: 8px; font-size: 22px; }
 .add-panel p:not(.eyebrow) { color: #858ea0; line-height: 1.5; font-size: 14px; }
 .add-panel form { margin-top: 24px; }

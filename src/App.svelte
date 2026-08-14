@@ -56,6 +56,13 @@
     file_count: number;
   };
 
+  type CloudStatus = {
+    provider: string;
+    configured: boolean;
+    connected: boolean;
+    account_email: string | null;
+  };
+
   let status: SystemStatus | null = null;
   let error = '';
   let showAddPanel = false;
@@ -69,12 +76,17 @@
   let backupMessages: Record<string, string> = {};
   let backups: Record<string, BackupRecord[]> = {};
   let loadingBackups = '';
+  let showCloudPanel = false;
+  let googleClientId = '';
+  let cloudStatus: CloudStatus | null = null;
+  let cloudMessage = '';
 
   onMount(() => {
     let timer: number | undefined;
     void (async () => {
       try {
         games = await invoke<GameRecord[]>('list_games');
+        cloudStatus = await invoke<CloudStatus>('get_cloud_status');
         await refreshRunningGames();
         timer = window.setInterval(refreshRunningGames, 2000);
       } catch (reason) {
@@ -108,6 +120,29 @@
     showAddPanel = true;
     error = '';
     inspection = null;
+  }
+
+  async function openCloudPanel() {
+    showCloudPanel = true;
+    showAddPanel = false;
+    error = '';
+    cloudMessage = '';
+    try {
+      cloudStatus = await invoke<CloudStatus>('get_cloud_status');
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
+
+  async function saveGoogleClientId() {
+    error = '';
+    cloudMessage = '';
+    try {
+      cloudStatus = await invoke<CloudStatus>('save_google_client_id', { clientId: googleClientId });
+      cloudMessage = 'Identifiant client enregistré localement.';
+    } catch (reason) {
+      error = reason instanceof Error ? reason.message : String(reason);
+    }
   }
 
   async function inspectGame() {
@@ -227,7 +262,7 @@
 
     <nav aria-label="Navigation principale">
       <a class="nav-item active" href="/" aria-current="page">Bibliothèque</a>
-      <a class="nav-item" href="/sync" on:click|preventDefault={() => (error = 'La synchronisation sera activée avec le moteur Cloud.')}>Synchronisation</a>
+      <a class="nav-item" class:active={showCloudPanel} href="/sync" on:click|preventDefault={openCloudPanel}>Synchronisation</a>
       <a class="nav-item" href="/settings" on:click|preventDefault={() => (error = 'Les paramètres seront ajoutés avec la configuration locale.')}>Paramètres</a>
     </nav>
 
@@ -252,7 +287,24 @@
       <div class="notice" role="status">{error}</div>
     {/if}
 
-    {#if showAddPanel}
+    {#if showCloudPanel}
+      <div class="cloud-panel">
+        <p class="eyebrow">Stockage Cloud</p>
+        <h2>Google Drive</h2>
+        <p>La configuration reste locale. Aucun secret OAuth n’est enregistré dans le dépôt.</p>
+        <div class="cloud-status">
+          <span class:connected={cloudStatus?.connected}>{cloudStatus?.connected ? 'Compte connecté' : 'Non connecté'}</span>
+          <small>{cloudStatus?.provider ?? 'Google Drive'} · {cloudStatus?.configured ? 'Client configuré' : 'Configuration requise'}</small>
+        </div>
+        <form on:submit|preventDefault={saveGoogleClientId}>
+          <label for="google-client-id">Identifiant client OAuth Google</label>
+          <input id="google-client-id" bind:value={googleClientId} placeholder="123456.apps.googleusercontent.com" autocomplete="off" />
+          <button class="primary cloud-save" type="submit">Enregistrer la configuration</button>
+        </form>
+        {#if cloudMessage}<div class="backup-message">{cloudMessage}</div>{/if}
+        <button class="text-button" on:click={() => (showCloudPanel = false)}>Retour à la bibliothèque</button>
+      </div>
+    {:else if showAddPanel}
       <div class="add-panel">
         <div>
           <p class="eyebrow">Nouveau jeu</p>
